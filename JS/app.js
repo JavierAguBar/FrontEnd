@@ -28,6 +28,11 @@ function formatNumber(value, decimals = 4) {
 let resultsPage = 1;
 let resultsView = 'wind';
 let latestResultsItems = [];
+let resultDays = [];
+const expandedResultDays = new Set();
+const expandedResultHours = new Set();
+const resultHourCache = new Map();
+const resultReadingCache = new Map();
 const resultColumnLabels = {
   date: 'Fecha / hora',
   dateutc: 'Fecha UTC (ms)',
@@ -98,30 +103,14 @@ const selectedResultColumns = {
   heat: ['date', 'station', 'city', 'tempf', 'temperature_c', 'humidity'],
 };
 
-function renderResultsTable(items) {
-  const head = document.querySelector('#results-head');
-  const body = document.querySelector('#results-body');
-  const metricLabel = document.querySelector('#latest-metric-label');
-  const metricValue = document.querySelector('#latest-speed');
-  const visibleColumns = selectedResultColumns[resultsView];
-
-  if (resultsView === 'heat') {
-    metricLabel.textContent = 'Última temperatura';
-    metricValue.textContent = items.length
-      ? `${formatNumber(items[0].temperature_c, 1)} °C`
-      : '—';
-  } else {
-    metricLabel.textContent = 'Última velocidad';
-    metricValue.textContent = items.length
-      ? `${formatNumber(items[0].windspeedmph, 2)} mph`
-      : '—';
-  }
-
-  const cellValue = (item, column) => {
+function resultCell(item, column) {
     let value = item[column];
     if (column === 'station' && !value) value = `Estación ${item.id_station}`;
     if (value == null || value === '') return '<td>—</td>';
-    if (column === 'dateutc') value = new Date(Number(value)).toISOString();
+    if (column === 'dateutc') {
+      const timestamp = typeof value === 'object' ? value.$numberLong : value;
+      value = new Date(Number(timestamp)).toISOString();
+    }
     if (column === 'date' || column === 'inserted_at' || column === 'lastRain') {
       const date = new Date(value);
       value = Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString('es-MX');
@@ -131,12 +120,52 @@ function renderResultsTable(items) {
     }
     const numeric = typeof item[column] === 'number';
     return `<td${numeric || column === 'dateutc' ? ' class="mono"' : ''}>${escapeHtml(value)}</td>`;
-  };
+}
 
+function renderResultsTable(items) {
+  const head = document.querySelector('#results-head');
+  const body = document.querySelector('#results-body');
+  const visibleColumns = selectedResultColumns[resultsView];
   head.innerHTML = `<tr>${visibleColumns.map(column => `<th>${resultColumnLabels[column]}</th>`).join('')}</tr>`;
+  head.hidden = false;
   body.innerHTML = items.length
-    ? rows(items.map(item => visibleColumns.map(column => cellValue(item, column)).join('')))
+    ? rows(items.map(item => visibleColumns.map(column => resultCell(item, column)).join('')))
     : `<tr><td colspan="${visibleColumns.length}" class="empty">No hay lecturas en esta página.</td></tr>`;
+}
+
+function renderResultsHierarchy() {
+  const head = document.querySelector('#results-head');
+  const body = document.querySelector('#results-body');
+  const visibleColumns = selectedResultColumns[resultsView];
+  const hourSelected = expandedResultHours.size > 0;
+  head.innerHTML = hourSelected
+    ? `<tr>${visibleColumns.map(column => `<th>${resultColumnLabels[column]}</th>`).join('')}</tr>`
+    : '';
+  head.hidden = !hourSelected;
+  const tableRows = [];
+
+  for (const day of resultDays) {
+    const dayIsOpen = expandedResultDays.has(day.value);
+    tableRows.push(`<tr class="result-group-row"><td colspan="${visibleColumns.length}"><button class="result-expand" type="button" data-expand-day="${escapeHtml(day.value)}" aria-expanded="${dayIsOpen}"><span class="result-chevron">${dayIsOpen ? '▾' : '▸'}</span><strong>${escapeHtml(new Date(`${day.value}T12:00:00`).toLocaleDateString('es-MX', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }))}</strong><span>${Number(day.count).toLocaleString('es-MX')} lecturas</span></button></td></tr>`);
+    if (!dayIsOpen) continue;
+
+    const hours = resultHourCache.get(day.value) || [];
+    for (const hour of hours) {
+      const hourKey = `${day.value}|${hour.value}`;
+      const hourIsOpen = expandedResultHours.has(hourKey);
+      tableRows.push(`<tr class="result-hour-row"><td colspan="${visibleColumns.length}"><button class="result-expand result-expand-hour" type="button" data-expand-hour="${escapeHtml(hourKey)}" aria-expanded="${hourIsOpen}"><span class="result-chevron">${hourIsOpen ? '▾' : '▸'}</span><strong>${escapeHtml(hour.value)}:00 h</strong><span>${Number(hour.count).toLocaleString('es-MX')} lecturas</span></button></td></tr>`);
+      if (!hourIsOpen) continue;
+
+      const readings = resultReadingCache.get(hourKey) || [];
+      for (const reading of readings) {
+        tableRows.push(`<tr class="result-reading-row">${visibleColumns.map(column => resultCell(reading, column)).join('')}</tr>`);
+      }
+    }
+  }
+
+  body.innerHTML = tableRows.length
+    ? tableRows.join('')
+    : `<tr><td colspan="${visibleColumns.length}" class="empty">No hay días con lecturas para estos filtros.</td></tr>`;
 }
 
 function renderColumnOptions() {
@@ -168,7 +197,7 @@ function renderColumnOptions() {
         selectedResultColumns[resultsView] = checkbox.checked
           ? [...selected, column]
           : selected.filter(item => item !== column);
-        renderResultsTable(latestResultsItems);
+        renderResultsHierarchy();
       });
       label.append(checkbox, document.createTextNode(resultColumnLabels[column]));
       options.appendChild(label);
@@ -181,7 +210,7 @@ function renderColumnOptions() {
 function updateResultsPagination(data) {
   document.querySelector('#result-count').textContent = data.total.toLocaleString('es-MX');
   document.querySelector('#page-indicator').textContent =
-    `Página ${data.page} de ${data.total_pages}`;
+    `Página ${data.page} de ${data.total_pages} · días`;
   document.querySelector('#previous-page').disabled = data.page <= 1;
   document.querySelector('#next-page').disabled = data.page >= data.total_pages;
 }
@@ -267,14 +296,24 @@ async function loadStations() {
 async function loadResults(page = resultsPage) {
   const body = document.querySelector('#results-body');
   try {
-    const parameters = new URLSearchParams({ page, page_size: 50, ...readResultsFilters() });
-    const data = await getData(`/resultados?${parameters}`);
+    const parameters = new URLSearchParams({
+      level: 'days', page, page_size: 30, ...readResultsFilters(),
+    });
+    const data = await getData(`/resultados/explorar?${parameters}`);
     setConnectionStatus(true);
     resultsPage = data.page;
-    latestResultsItems = data.items;
+    resultDays = data.items;
+    latestResultsItems = [];
+    expandedResultDays.clear();
+    expandedResultHours.clear();
+    resultHourCache.clear();
+    resultReadingCache.clear();
+    document.querySelector('#results-total-label').textContent = 'Días encontrados';
+    document.querySelector('#latest-metric-label').textContent = 'Lecturas del día abierto';
+    document.querySelector('#latest-speed').textContent = '—';
+    document.querySelector('.extremes-strip').hidden = true;
     updateResultsPagination(data);
-    renderResultsTable(data.items);
-    renderExtremes(data.extremes);
+    renderResultsHierarchy();
   } catch (error) {
     setConnectionStatus(false);
     document.querySelector('#result-count').textContent = '—';
@@ -283,6 +322,48 @@ async function loadResults(page = resultsPage) {
     document.querySelector('#maximum-value').textContent = '—';
     body.innerHTML = `<tr><td colspan="${selectedResultColumns[resultsView].length}" class="error">No se pudieron cargar las lecturas. Verifica la API.</td></tr>`;
   }
+}
+
+async function loadExpandedResultLevel(level, date, hour = '') {
+  const parameters = new URLSearchParams({ ...readResultsFilters(), level, date });
+  if (hour) parameters.set('hour', hour);
+  const data = await getData(`/resultados/explorar?${parameters}`);
+  if (level === 'hours') resultHourCache.set(date, data.items);
+  if (level === 'readings') {
+    const key = `${date}|${hour}`;
+    resultReadingCache.set(key, data.items);
+    latestResultsItems = data.items;
+    document.querySelector('#latest-speed').textContent = data.total.toLocaleString('es-MX');
+  }
+  renderResultsHierarchy();
+}
+
+function updateExpandedResult(level, key) {
+  const expanded = level === 'day' ? expandedResultDays : expandedResultHours;
+  if (expanded.has(key)) {
+    expanded.delete(key);
+    if (level === 'day') {
+      for (const hourKey of expandedResultHours) {
+        if (hourKey.startsWith(`${key}|`)) expandedResultHours.delete(hourKey);
+      }
+    }
+    renderResultsHierarchy();
+    return;
+  }
+
+  expanded.add(key);
+  renderResultsHierarchy();
+  const [date, hour] = level === 'day' ? [key, ''] : key.split('|');
+  const cache = level === 'day' ? resultHourCache : resultReadingCache;
+  const cacheKey = level === 'day' ? date : key;
+  if (cache.has(cacheKey)) return;
+  loadExpandedResultLevel(level === 'day' ? 'hours' : 'readings', date, hour)
+    .catch(error => {
+      setConnectionStatus(false);
+      cache.set(cacheKey, []);
+      renderResultsHierarchy();
+      console.error('No se pudo desplegar el nivel de resultados', error);
+    });
 }
 
 function renderExtremes(extremes) {
@@ -329,6 +410,12 @@ function syncResultsViewToOrder() {
 }
 
 function initializeResultsControls() {
+  document.querySelector('#results-body').addEventListener('click', event => {
+    const dayButton = event.target.closest('[data-expand-day]');
+    const hourButton = event.target.closest('[data-expand-hour]');
+    if (dayButton) updateExpandedResult('day', dayButton.dataset.expandDay);
+    if (hourButton) updateExpandedResult('hour', hourButton.dataset.expandHour);
+  });
   document.querySelectorAll('[data-results-view]').forEach(button => {
     button.addEventListener('click', () => {
       resultsView = button.dataset.resultsView;

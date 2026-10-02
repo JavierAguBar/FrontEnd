@@ -1,26 +1,26 @@
 <!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport"
-            content="width=device-width, initial-scale=1"><title>Viento Norte |
+            content="width=device-width, initial-scale=1"><title>Chetuweather |
             Resultados</title><link rel="stylesheet"
             href="../CSS/site.css"></head><body><header class="topbar"><a
                 class="brand" href="../index.html"><span
-                    class="brand-mark">VN</span><span>Viento
-                    Norte</span></a><nav class="nav-links"
+                    class="brand-mark">VN</span><span>Chetuweather</span></a><nav class="nav-links"
                 aria-label="Navegación principal"><a
                     href="../index.html">Inicio</a><a
                     href="../Mapa/index.html">Mapa</a><a
                     href="estaciones.html">Estaciones</a><a class="active"
-                    href="resultados.html">Resultados</a></nav><span
+                    href="resultados.html">Resultados</a><a
+                    href="../graficas/graficas.html">Gráficas</a></nav><span
                 class="status-pill"><i></i> Comprobando API</span></header><main
-            class="page-shell"><div class="page-heading"><div><p
+            class="page-shell results-page"><div class="page-heading"><div><p
                         class="section-kicker">02 /
                         OBSERVACIONES</p><h1>Resultados</h1></div><p>Lecturas
                     meteorológicas recientes consultadas desde
-                    MongoDB.</p></div><div class="metric-strip"><div
-                    class="metric"><label id="results-total-label">Registros
+                    MongoDB.</p></div><div class="metric-strip result-metrics"><div
+                    class="metric"><label id="results-total-label">Días
                         disponibles</label><strong
                         id="result-count">—</strong></div><div
-                    class="metric"><label id="latest-metric-label">Última
-                        velocidad</label><strong
+                    class="metric"><label id="latest-metric-label">Lecturas
+                        del día abierto</label><strong
                         id="latest-speed">—</strong></div><div
                     class="metric"><label>Origen</label><strong>MongoDB</strong></div></div><div
                 class="toolbar results-filters">
@@ -58,19 +58,19 @@
                         id="minimum-value">—</strong></div><div><span
                         id="maximum-label">Máximo viento</span><strong
                         id="maximum-value">—</strong></div></div><div
-                class="toolbar" role="toolbar" witdh="100%"><div
+                class="results-columns" role="toolbar" aria-label="Personalizar columnas"><div
                     class="column-picker" aria-label="Columnas visibles"><span
                         class="column-picker-title">Mostrar datos</span><div
                         id="column-options" class="column-options" role="group"
                         aria-label="Elegir columnas de la tabla"></div></div></div><div
                 class="table-wrap"><table class="data-table"><thead
-                        id="results-head"><tr><th>Fecha /
+                        id="results-head" hidden><tr><th>Fecha /
                                 hora</th><th>Estación</th><th>Velocidad</th><th>Dirección</th><th>Humedad</th></tr></thead><tbody
                         id="results-body"><tr><td colspan="5"
                                 class="loading">Consultando
                                 servidor...</td></tr></tbody></table></div><div
                 class="pagination-bar"
-                aria-label="Paginación de lecturas"><button class="button"
+                aria-label="Paginación de días"><button class="button"
                     id="previous-page" type="button" disabled
                     aria-label="Página anterior">← Anterior</button><span
                     id="page-indicator" aria-live="polite">Página
@@ -78,5 +78,5 @@
                     aria-label="Página siguiente">Siguiente
                     →</button></div></main><footer
             class="site-footer"><span>Viento Norte / Resultados</span><span>GET
-                /api/resultados</span></footer><script
-            src="../JS/app.js?v=10"></script></body></html>
+                /api/resultados/explorar</span></footer><script
+            src="../JS/app.js?v=11"></script></body></html>
