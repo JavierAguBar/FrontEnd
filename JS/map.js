@@ -1,8 +1,7 @@
+import { getStations } from '../src/services/api.js';
+
 async function loadMapStations() {
-  const apiBase = window.APP_CONFIG?.apiBase || 'http://localhost:5000/api';
-  const response = await fetch(`${apiBase}/estaciones`);
-  if (!response.ok) throw new Error(`No se pudieron consultar las estaciones (${response.status})`);
-  const source = await response.json();
+  const source = await getStations();
   if (!Array.isArray(source)) throw new Error('La API devolvió un formato de estaciones inválido');
   return source.map(station => ({
     id_station: station.id_station,
@@ -15,9 +14,11 @@ async function loadMapStations() {
 
 function setMapConnectionStatus(connected) {
   const status = document.querySelector('.status-pill');
-  if (!status) return;
-  status.classList.toggle('is-offline', !connected);
-  status.innerHTML = `<i></i>${connected ? 'MongoDB conectado' : 'API sin conexión'}`;
+  if (status) {
+    status.classList.toggle('is-offline', !connected);
+    status.innerHTML = `<i></i>${connected ? 'MongoDB conectado' : 'API sin conexión'}`;
+  }
+  window.dispatchEvent(new CustomEvent('api-status', { detail: { connected } }));
 }
 
 function setMapPageCopy() {
@@ -39,7 +40,7 @@ async function renderMap() {
     item.className = 'error';
     item.textContent = error.message;
     document.querySelector('#map-station-list').replaceChildren(item);
-    return;
+    return () => {};
   }
   const map = L.map('station-map').setView([18.53, -88.29], 12);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap contributors', maxZoom: 18 }).addTo(map);
@@ -72,5 +73,9 @@ async function renderMap() {
     item.addEventListener('click', () => { map.setView(point, 14); marker.openPopup(); }); list.appendChild(item);
   });
   if (bounds.length) map.fitBounds(bounds, { padding: [30, 30] });
+  return () => map.remove();
 }
-renderMap();
+
+export function initializeMap() {
+  return renderMap();
+}

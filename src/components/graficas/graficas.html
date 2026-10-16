@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Gráficas históricas de las mediciones meteorológicas de Viento Norte.">
+    <title>Viento Norte | Gráficas</title>
+    <link rel="stylesheet" href="../CSS/site.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.9/dist/chart.umd.min.js"></script>
+</head>
+<body>
+    <header class="topbar">
+        <a class="brand" href="../index.html"><span class="brand-mark">VN</span><span>Viento Norte</span></a>
+        <nav class="nav-links" aria-label="Navegación principal">
+            <a href="../index.html">Inicio</a>
+            <a href="../Mapa/index.html">Mapa</a>
+            <a href="../Tablas/estaciones.html">Estaciones</a>
+            <a href="../Tablas/resultados.html">Resultados</a>
+            <a class="active" href="graficas.html">Gráficas</a>
+        </nav>
+        <span class="status-pill"><i></i> Comprobando API</span>
+    </header>
+
+    <main class="page-shell graph-page">
+        <div class="page-heading">
+            <div><p class="section-kicker">03 / HISTORIAL</p><h1>Gráficas</h1></div>
+            <p>Compara las mediciones meteorológicas por estación y periodo.</p>
+        </div>
+
+        <div class="graph-periods" role="group" aria-label="Periodo de consulta">
+            <button class="graph-period active" type="button" data-period="24h" aria-pressed="true">Últimas 24 horas</button>
+            <button class="graph-period" type="button" data-period="range" aria-pressed="false">Buscar por rango</button>
+        </div>
+
+        <section class="toolbar graph-filters" aria-label="Filtros de gráficas">
+            <label>Medición
+                <select id="graph-metric" class="select">
+                    <option value="windspeedmph">Velocidad del viento</option>
+                    <option value="tempf">Temperatura</option>
+                    <option value="humidity">Humedad</option>
+                    <option value="windgustmph">Ráfaga de viento</option>
+                    <option value="baromrelin">Presión atmosférica</option>
+                    <option value="hourlyrainin">Lluvia por hora</option>
+                </select>
+            </label>
+            <label>Estación
+                <select id="graph-station" class="select">
+                    <option value="all">Todas las estaciones</option>
+                </select>
+            </label>
+            <fieldset class="graph-city-filter">
+                <legend>Ciudades</legend>
+                <details class="graph-city-picker" id="graph-city-picker">
+                    <summary id="graph-city-summary">Cargando ciudades...</summary>
+                    <div id="graph-cities" class="graph-city-options"></div>
+                </details>
+            </fieldset>
+            <label id="range-start-filter" hidden>Desde
+                <input id="graph-start-date" type="date" aria-label="Fecha inicial del rango">
+            </label>
+            <label id="range-end-filter" hidden>Hasta
+                <input id="graph-end-date" type="date" aria-label="Fecha final del rango">
+            </label>
+        </section>
+
+        <section class="metric-strip graph-summary" aria-label="Resumen de mediciones">
+            <div class="metric"><label>Promedio del periodo</label><strong id="summary-average">—</strong></div>
+            <div class="metric"><label>Mínimo registrado</label><strong id="summary-minimum">—</strong></div>
+            <div class="metric"><label>Máximo registrado</label><strong id="summary-maximum">—</strong></div>
+        </section>
+
+        <section class="graph-panel" aria-label="Gráfica de mediciones">
+            <div class="graph-panel-heading">
+                <div><h2 id="chart-caption">Velocidad del viento · Últimas 24 horas</h2><p>Promedio por intervalo; la franja muestra mínimo y máximo.</p></div>
+                <span class="graph-count"><strong id="reading-count">—</strong> lecturas</span>
+            </div>
+            <div class="graph-chart-wrap"><canvas id="weather-chart" aria-label="Serie histórica de mediciones" role="img"></canvas></div>
+            <p id="chart-message" class="graph-message" aria-live="polite">Cargando mediciones...</p>
+            <div class="graph-legend" aria-label="Leyenda de la gráfica">
+                <span><i class="legend-average"></i>Promedio</span><span><i class="legend-range"></i>Rango mínimo–máximo</span>
+            </div>
+        </section>
+    </main>
+
+    <footer class="site-footer"><span>Viento Norte / Gráficas</span><span>GET /api/graficas</span></footer>
+    <script src="../JS/graficas.js"></script>
+</body>
+</html>

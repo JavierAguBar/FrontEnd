@@ -1,4 +1,4 @@
-const API_BASE = window.APP_CONFIG?.apiBase || 'http://localhost:5000/api';
+import { getCharts, getStations } from '../src/services/api.js';
 const metricLabels = {
     windspeedmph: 'Velocidad del viento',
     tempf: 'Temperatura',
@@ -9,12 +9,9 @@ const metricLabels = {
 };
 const periodLabels = {
     '24h': 'Últimas 24 horas',
-    day: 'Día seleccionado',
-    month: 'Últimos 30 días',
     range: 'Rango seleccionado',
 };
 const numberFormat = new Intl.NumberFormat('es-MX', { maximumFractionDigits: 1 });
-const dateInput = document.querySelector('#graph-date');
 const rangeStartInput = document.querySelector('#graph-start-date');
 const rangeEndInput = document.querySelector('#graph-end-date');
 const chartMessage = document.querySelector('#chart-message');
@@ -32,19 +29,20 @@ function formatBucket(value) {
     if (activePeriod === 'range' && rangeDurationDays() > 90) {
         return new Intl.DateTimeFormat('es-MX', { month: 'short' }).format(date);
     }
-    if (activePeriod === 'month' || (activePeriod === 'range' && rangeDurationDays() > 2)) {
+    if (activePeriod === 'range' && rangeDurationDays() > 2) {
         return new Intl.DateTimeFormat('es-MX', { day: 'numeric', month: 'short' }).format(date);
     }
     return new Intl.DateTimeFormat('es-MX', {
-        ...(activePeriod === '24h' || activePeriod === 'day' ? { hour: '2-digit', minute: '2-digit' } : {}),
+        ...(activePeriod === '24h' || (activePeriod === 'range' && rangeDurationDays() <= 2) ? { hour: '2-digit', minute: '2-digit' } : {}),
         day: 'numeric', month: 'short',
     }).format(date);
 }
 
 function rangeDurationDays() {
+    if (!rangeStartInput.value || !rangeEndInput.value) return 0;
     const start = new Date(`${rangeStartInput.value}T00:00:00`);
     const end = new Date(`${rangeEndInput.value}T00:00:00`);
-    return Math.max(0, (end - start) / 86400000);
+    return Math.floor((end - start) / 86400000) + 1;
 }
 
 function updateSummary(points, unit) {
@@ -152,7 +150,7 @@ function renderChart(data) {
             plugins: {
                 legend: {
                     display: Boolean(citySeries),
-                    labels: { filter: item => !graphChart?.data.datasets[item.datasetIndex]._cityRange },
+                    labels: { filter: item => !datasets[item.datasetIndex]?._cityRange },
                 },
                 tooltip: {
                     callbacks: {
@@ -182,7 +180,6 @@ async function loadGraph() {
         metric: document.querySelector('#graph-metric').value,
         station: document.querySelector('#graph-station').value,
     });
-    if (activePeriod === 'day') parameters.set('date', dateInput.value);
     if (activePeriod === 'range') {
         parameters.set('start_date', rangeStartInput.value);
         parameters.set('end_date', rangeEndInput.value);
@@ -226,12 +223,7 @@ async function loadGraph() {
                 const stationResults = await Promise.all(cityStations.map(async station => {
                     const stationParameters = new URLSearchParams(parameters);
                     stationParameters.set('station', station.id_station);
-                    const response = await fetch(`${API_BASE}/graficas?${stationParameters}`);
-                    if (!response.ok) {
-                        const detail = await response.json().catch(() => ({}));
-                        throw Object.assign(new Error(detail.error || `HTTP ${response.status}`), { apiReachable: true });
-                    }
-                    return response.json();
+                    return getCharts(stationParameters);
                 }));
                 return {
                     series: combineCityPoints(city, stationResults.map(result => result.points || [])),
@@ -240,18 +232,14 @@ async function loadGraph() {
             }));
             data = { ...cityResults[0].response, citySeries: cityResults.map(result => result.series) };
         } else {
-            const response = await fetch(`${API_BASE}/graficas?${parameters}`);
-            if (!response.ok) {
-                const detail = await response.json().catch(() => ({}));
-                throw Object.assign(new Error(detail.error || `HTTP ${response.status}`), { apiReachable: true });
-            }
-            data = await response.json();
+            data = await getCharts(parameters);
         }
         if (requestId !== graphRequestId) return;
         renderChart(data);
         const status = document.querySelector('.status-pill');
         status.classList.remove('is-offline');
         status.innerHTML = '<i></i> MongoDB conectado';
+        window.dispatchEvent(new CustomEvent('api-status', { detail: { connected: true } }));
     } catch (error) {
         if (requestId !== graphRequestId) return;
         chartMessage.hidden = false;
@@ -259,18 +247,15 @@ async function loadGraph() {
         updateSummary([], '');
         document.querySelector('#reading-count').textContent = '—';
         const status = document.querySelector('.status-pill');
-        status.classList.toggle('is-offline', !error.apiReachable);
-        status.innerHTML = error.apiReachable
-            ? '<i></i> MongoDB conectado'
-            : '<i></i> API sin conexión';
+        status.classList.add('is-offline');
+        status.innerHTML = '<i></i> API sin conexión';
+        window.dispatchEvent(new CustomEvent('api-status', { detail: { connected: false } }));
     }
 }
 
 async function loadStations() {
     try {
-        const response = await fetch(`${API_BASE}/estaciones`);
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        stations = await response.json();
+        stations = await getStations();
         stations.sort((left, right) => (left.city || '').localeCompare(right.city || '')
             || (left.nombre || '').localeCompare(right.nombre || ''));
         const stationSelect = document.querySelector('#graph-station');
@@ -299,9 +284,9 @@ async function loadStations() {
         updateCitySummary();
     } catch {
         chartMessage.textContent = 'No se pudieron cargar las estaciones; puedes consultar el promedio general.';
+        window.dispatchEvent(new CustomEvent('api-status', { detail: { connected: false } }));
     }
 }
-
 
 document.querySelectorAll('[data-period]').forEach(button => {
     button.addEventListener('click', () => {
@@ -311,7 +296,6 @@ document.querySelectorAll('[data-period]').forEach(button => {
             tab.classList.toggle('active', selected);
             tab.setAttribute('aria-pressed', String(selected));
         });
-        document.querySelector('#day-filter').hidden = activePeriod !== 'day';
         document.querySelector('#range-start-filter').hidden = activePeriod !== 'range';
         document.querySelector('#range-end-filter').hidden = activePeriod !== 'range';
         if (activePeriod === 'range' && !rangeStartInput.value) {
@@ -330,7 +314,6 @@ document.querySelector('#graph-station').addEventListener('change', () => {
     document.querySelector('#graph-city-filter').disabled = document.querySelector('#graph-station').value !== 'all';
     loadGraph();
 });
-dateInput.addEventListener('change', loadGraph);
 rangeStartInput.addEventListener('change', () => {
     rangeEndInput.min = rangeStartInput.value;
     loadGraph();
@@ -339,7 +322,5 @@ rangeEndInput.addEventListener('change', () => {
     rangeStartInput.max = rangeEndInput.value;
     loadGraph();
 });
-dateInput.value = new Date().toLocaleDateString('en-CA');
-dateInput.max = dateInput.value;
 rangeEndInput.max = new Date().toLocaleDateString('en-CA');
 loadStations().finally(loadGraph);

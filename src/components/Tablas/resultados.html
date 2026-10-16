@@ -1,0 +1,83 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport"
+            content="width=device-width, initial-scale=1"><title>Chetuweather |
+            Resultados</title><link rel="stylesheet"
+            href="../../assets/CSS/site.css"></head><body><header class="topbar"><a
+                class="brand" href="../index.html"><span
+                    class="brand-mark">VN</span><span>Chetuweather</span></a><nav class="nav-links"
+                aria-label="Navegación principal"><a
+                    href="../index.html">Inicio</a><a
+                    href="../Mapa/index.html">Mapa</a><a
+                    href="estaciones.html">Estaciones</a><a class="active"
+                    href="resultados.html">Resultados</a><a
+                    href="../graficas/graficas.html">Gráficas</a>                    </nav>                    <div class="header-actions"><span
+                                    class="status-pill"><i></i> Comprobando API</span></div></header><main
+            class="page-shell results-page"><div class="page-heading"><div><p
+                        class="section-kicker">02 /
+                        OBSERVACIONES</p><h1>Resultados</h1></div><p>Lecturas
+                    meteorológicas recientes consultadas desde
+                    MongoDB.</p></div><div class="metric-strip result-metrics"><div
+                    class="metric"><label id="results-total-label">Días
+                        disponibles</label><strong
+                        id="result-count">—</strong></div><div
+                    class="metric"><label id="latest-metric-label">Lecturas
+                        del día abierto</label><strong
+                        id="latest-speed">—</strong></div><div
+                    class="metric"><label>Origen</label><strong>MongoDB</strong></div></div><div
+                class="results-toolbar"><span
+                    id="results-filter-summary" aria-live="polite">Todas las estaciones · Todas las fechas · Vista agrupada</span></div>
+            <div class="results-layout">
+            <aside class="results-sidebar" id="results-filter-dialog" aria-labelledby="results-filter-title"><div class="sidebar-sticky-content">
+                <div class="sidebar-header"><h3
+                    id="results-filter-title">Filtros</h3></div>
+                <div class="results-drawer-body" style="padding:0;overflow:visible">
+                    <section class="results-drawer-section" aria-labelledby="results-time-heading"><h3
+                        id="results-time-heading">Tiempo</h3><label>Desde<input
+                        id="date-start" type="date" aria-label="Fecha inicial del rango"></label><label>Hasta<input
+                        id="date-end" type="date" aria-label="Fecha final del rango"></label></section>
+                    <section class="results-drawer-section" aria-labelledby="results-data-heading"><h3
+                        id="results-data-heading">Datos</h3><label>Estación<select
+                        id="results-station" class="select" aria-label="Filtrar por estación"><option
+                        value="all">Todas las estaciones</option></select></label><label>Ordenar por<select
+                        id="date-order" class="select" aria-label="Ordenar resultados"><option
+                        value="date_desc">Fecha: más recientes</option><option value="date_asc">Fecha: más antiguos</option><option
+                        value="wind_max">Viento: máximo a mínimo</option><option value="wind_min">Viento: mínimo a máximo</option><option
+                        value="temperature_max">Temperatura: máxima a mínima</option><option
+                        value="temperature_min">Temperatura: mínima a máxima</option></select></label></section>
+                    <section class="results-drawer-section" aria-labelledby="results-view-heading"><h3
+                        id="results-view-heading">Presentación</h3><div class="filter-actions results-mode"
+                        role="group" aria-label="Vista de resultados"><button class="button button-primary"
+                        type="button" data-results-mode="hierarchy" aria-pressed="true">Agrupada</button><button
+                        class="button" type="button" data-results-mode="table" aria-pressed="false">Tabla</button></div></section>
+                    <div class="results-columns" role="toolbar" aria-label="Personalizar columnas"><div
+                        class="column-picker" aria-label="Columnas visibles"><span
+                        class="column-picker-title">Mostrar datos</span><div id="column-options"
+                        class="column-options" role="group" aria-label="Elegir columnas de la tabla"></div></div></div>
+                    <p class="results-filter-error" id="results-filter-error" role="alert" hidden></p>
+                </div>
+                <div class="sidebar-actions"><button class="button button-primary btn-block"
+                    id="apply-results-filters" type="button">Aplicar filtros</button><button class="button btn-block"
+                    id="clear-results-filters" type="button">Limpiar</button></div>
+            </div></aside>
+            <section class="results-main-content">
+            <div class="extremes-strip" aria-live="polite"><div><span
+                        id="minimum-label">Mínimo viento</span><strong
+                        id="minimum-value">—</strong></div><div><span
+                        id="maximum-label">Máximo viento</span><strong
+                        id="maximum-value">—</strong></div></div><div
+                    class="table-wrap"><table class="data-table"><thead
+                        id="results-head" hidden><tr><th>Fecha /
+                                hora</th><th>Estación</th><th>Velocidad</th><th>Dirección</th><th>Humedad</th></tr></thead><tbody
+                        id="results-body"><tr><td colspan="5"
+                                class="loading">Consultando
+                                servidor...</td></tr></tbody></table></div><div
+                class="pagination-bar"
+                aria-label="Paginación de días"><button class="button"
+                    id="previous-page" type="button" disabled
+                    aria-label="Página anterior">← Anterior</button><span
+                    id="page-indicator" aria-live="polite">Página
+                    1</span><button class="button" id="next-page" type="button"
+                    aria-label="Página siguiente">Siguiente
+                    →</button></div></section></div></main><footer
+            class="site-footer"><span>Viento Norte / Resultados</span><span>GET
+                /api/resultados/explorar</span></footer><script
+            src="../JS/app.js?v=25"></script></body></html>

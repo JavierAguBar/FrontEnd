@@ -1,51 +1,17 @@
 <!doctype html>
 <html lang="es">
-<head>
-	<meta charset="utf-8">
-	<meta name="viewport" content="width=device-width, initial-scale=1">
-	<meta name="description" content="Panel de monitoreo meteorológico para estaciones de viento.">
-	<title>Viento Norte | Inicio</title>
-	<link rel="stylesheet" href="CSS/site.css">
-</head>
-<body>
-	<header class="topbar">
-		<a class="brand" href="index.html"><span class="brand-mark">VN</span><span>Chetuweather</span></a>
-		<nav class="nav-links" aria-label="Navegación principal">
-			<a class="active" href="index.html">Inicio</a>
-			<a href="Mapa/index.html">Mapa</a>
-			<a href="Tablas/estaciones.html">Estaciones</a>
-			<a href="Tablas/resultados.html">Resultados</a>
-			<a href="graficas/graficas.html">Gráficas</a>
-		</nav>
-		<span class="status-pill"><i></i> Comprobando API</span>
-	</header>
-
-	<main class="welcome-shell">
-		<section class="welcome-copy">
-			<p class="eyebrow">MONITOREO METEOROLÓGICO · CHETUMAL</p>
-			<h1>El clima<br><em>en Chetumal</em></h1>
-			<p class="lead">Consulta el pulso de tus estaciones, compara lecturas y encuentra patrones en un solo lugar.</p>
-			<div class="welcome-actions">
-				<a class="button button-primary" href="Tablas/estaciones.html">Ver estaciones <span>↗</span></a>
-				<a class="text-link" href="Tablas/resultados.html">Explorar resultados <span>→</span></a>
-			</div>
-		</section>
-		<section class="welcome-visual" aria-label="Resumen del sistema">
-			<div class="wind-orbit orbit-one"></div>
-			<div class="wind-orbit orbit-two"></div>
-			<div class="wind-orbit orbit-three"></div>
-			<div class="visual-card">
-				<div class="visual-card-top"><span>LECTURA EN TIEMPO REAL</span><b>●</b></div>
-				<div class="wind-value">6.4 <small>m/s</small></div>
-				<div class="wind-direction"><span class="direction-arrow">↗</span> ESE · 112°</div>
-				<div class="mini-chart"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
-				<div class="visual-footer"><span>Estación 03</span><span>Hace 2 min</span></div>
-			</div>
-			<div class="coordinate-note">18.5488° N<br>88.2933° O</div>
-		</section>
-	</main>
-
-	<footer class="site-footer"><span>Viento Norte</span><span>Lectura más reciente desde MongoDB</span></footer>
-	<script src="JS/app.js?v=2"></script>
-</body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Panel de monitoreo meteorológico para estaciones de viento."
+    />
+    <title>Viento Norte | Inicio</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
 </html>

@@ -1,16 +1,12 @@
-const API_BASE = window.APP_CONFIG?.apiBase || 'http://localhost:5000/api';
-
-async function getData(endpoint) {
-  const response = await fetch(`${API_BASE}${endpoint}`);
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  return response.json();
-}
+import { apiGet as getData, getStations } from '../src/services/api.js';
 
 function setConnectionStatus(connected) {
   const status = document.querySelector('.status-pill');
-  if (!status) return;
-  status.classList.toggle('is-offline', !connected);
-  status.innerHTML = `<i></i>${connected ? 'MongoDB conectado' : 'API sin conexión'}`;
+  if (status) {
+    status.classList.toggle('is-offline', !connected);
+    status.innerHTML = `<i></i>${connected ? 'MongoDB conectado' : 'API sin conexión'}`;
+  }
+  window.dispatchEvent(new CustomEvent('api-status', { detail: { connected } }));
 }
 
 function escapeHtml(value) {
@@ -27,8 +23,15 @@ function formatNumber(value, decimals = 4) {
 
 let resultsPage = 1;
 let resultsView = 'wind';
+let resultsDisplayMode = 'hierarchy';
+let appliedResultsFilters = { start_date: '', end_date: '', order: 'date_desc', station: 'all' };
+let appliedResultsDisplayMode = 'hierarchy';
+let appliedResultsView = 'wind';
 let latestResultsItems = [];
 let resultDays = [];
+let allResultDays = [];
+const resultsPageSize = 30;
+const resultsTablePageSize = 100;
 const expandedResultDays = new Set();
 const expandedResultHours = new Set();
 const resultHourCache = new Map();
@@ -102,6 +105,10 @@ const selectedResultColumns = {
   wind: ['date', 'station', 'city', 'windspeedmph', 'winddir', 'humidity'],
   heat: ['date', 'station', 'city', 'tempf', 'temperature_c', 'humidity'],
 };
+let appliedResultColumns = {
+  wind: [...selectedResultColumns.wind],
+  heat: [...selectedResultColumns.heat],
+};
 
 function resultCell(item, column) {
     let value = item[column];
@@ -133,27 +140,32 @@ function renderResultsTable(items) {
     : `<tr><td colspan="${visibleColumns.length}" class="empty">No hay lecturas en esta página.</td></tr>`;
 }
 
+function resultAverageCells(group, visibleColumns) {
+  return visibleColumns.slice(1).map(column => (
+    typeof group.averages?.[column] === 'number'
+      ? resultCell(group.averages, column).replace('<td', '<td title="Promedio"')
+      : '<td>—</td>'
+  )).join('');
+}
+
 function renderResultsHierarchy() {
   const head = document.querySelector('#results-head');
   const body = document.querySelector('#results-body');
   const visibleColumns = selectedResultColumns[resultsView];
-  const hourSelected = expandedResultHours.size > 0;
-  head.innerHTML = hourSelected
-    ? `<tr>${visibleColumns.map(column => `<th>${resultColumnLabels[column]}</th>`).join('')}</tr>`
-    : '';
-  head.hidden = !hourSelected;
+  head.innerHTML = `<tr>${visibleColumns.map(column => `<th>${resultColumnLabels[column]}</th>`).join('')}</tr>`;
+  head.hidden = false;
   const tableRows = [];
 
   for (const day of resultDays) {
     const dayIsOpen = expandedResultDays.has(day.value);
-    tableRows.push(`<tr class="result-group-row"><td colspan="${visibleColumns.length}"><button class="result-expand" type="button" data-expand-day="${escapeHtml(day.value)}" aria-expanded="${dayIsOpen}"><span class="result-chevron">${dayIsOpen ? '▾' : '▸'}</span><strong>${escapeHtml(new Date(`${day.value}T12:00:00`).toLocaleDateString('es-MX', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }))}</strong><span>${Number(day.count).toLocaleString('es-MX')} lecturas</span></button></td></tr>`);
+    tableRows.push(`<tr class="result-group-row"><td><button class="result-expand" type="button" data-expand-day="${escapeHtml(day.value)}" aria-expanded="${dayIsOpen}"><span class="result-chevron">${dayIsOpen ? '▾' : '▸'}</span><strong>${escapeHtml(new Date(`${day.value}T12:00:00`).toLocaleDateString('es-MX', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }))}</strong><span>${Number(day.count).toLocaleString('es-MX')} lecturas</span></button></td>${resultAverageCells(day, visibleColumns)}</tr>`);
     if (!dayIsOpen) continue;
 
     const hours = resultHourCache.get(day.value) || [];
     for (const hour of hours) {
       const hourKey = `${day.value}|${hour.value}`;
       const hourIsOpen = expandedResultHours.has(hourKey);
-      tableRows.push(`<tr class="result-hour-row"><td colspan="${visibleColumns.length}"><button class="result-expand result-expand-hour" type="button" data-expand-hour="${escapeHtml(hourKey)}" aria-expanded="${hourIsOpen}"><span class="result-chevron">${hourIsOpen ? '▾' : '▸'}</span><strong>${escapeHtml(hour.value)}:00 h</strong><span>${Number(hour.count).toLocaleString('es-MX')} lecturas</span></button></td></tr>`);
+      tableRows.push(`<tr class="result-hour-row"><td><button class="result-expand result-expand-hour" type="button" data-expand-hour="${escapeHtml(hourKey)}" aria-expanded="${hourIsOpen}"><span class="result-chevron">${hourIsOpen ? '▾' : '▸'}</span><strong>${escapeHtml(hour.value)}:00 h</strong><span>${Number(hour.count).toLocaleString('es-MX')} lecturas</span></button></td>${resultAverageCells(hour, visibleColumns)}</tr>`);
       if (!hourIsOpen) continue;
 
       const readings = resultReadingCache.get(hourKey) || [];
@@ -197,7 +209,6 @@ function renderColumnOptions() {
         selectedResultColumns[resultsView] = checkbox.checked
           ? [...selected, column]
           : selected.filter(item => item !== column);
-        renderResultsHierarchy();
       });
       label.append(checkbox, document.createTextNode(resultColumnLabels[column]));
       options.appendChild(label);
@@ -207,10 +218,19 @@ function renderColumnOptions() {
   }));
 }
 
-function updateResultsPagination(data) {
+function updateResultsPagination(totalDays, page) {
+  const totalPages = Math.max(1, Math.ceil(totalDays / resultsPageSize));
+  document.querySelector('#result-count').textContent = totalDays.toLocaleString('es-MX');
+  document.querySelector('#page-indicator').textContent =
+    `Página ${page} de ${totalPages} · días`;
+  document.querySelector('#previous-page').disabled = page <= 1;
+  document.querySelector('#next-page').disabled = page >= totalPages;
+}
+
+function updateResultsTablePagination(data) {
   document.querySelector('#result-count').textContent = data.total.toLocaleString('es-MX');
   document.querySelector('#page-indicator').textContent =
-    `Página ${data.page} de ${data.total_pages} · días`;
+    `Página ${data.page} de ${data.total_pages} · lecturas`;
   document.querySelector('#previous-page').disabled = data.page <= 1;
   document.querySelector('#next-page').disabled = data.page >= data.total_pages;
 }
@@ -259,7 +279,7 @@ async function loadStations() {
   const search = document.querySelector('#station-search');
   const city = document.querySelector('#city-filter');
   try {
-    const data = await getData('/estaciones');
+    const data = await getStations();
     setConnectionStatus(true);
     const render = () => {
       const term = search.value.toLowerCase();
@@ -293,16 +313,66 @@ async function loadStations() {
   }
 }
 
+async function loadResultStations() {
+  const select = document.querySelector('#results-station');
+  try {
+    const stations = await getStations();
+    for (const station of stations) {
+      const option = document.createElement('option');
+      option.value = String(station.id_station);
+      option.textContent = `${station.nombre || `Estación ${station.id_station}`}${station.city ? ` · ${station.city}` : ''}`;
+      select.appendChild(option);
+    }
+  } catch (error) {
+    console.error('No se pudieron cargar las estaciones para los resultados', error);
+  }
+}
+
 async function loadResults(page = resultsPage) {
   const body = document.querySelector('#results-body');
   try {
+    const filters = readResultsFilters();
+    if (resultsDisplayMode === 'table') {
+      const parameters = new URLSearchParams({
+        page: String(page),
+        page_size: String(resultsTablePageSize),
+        order: filters.order,
+        station: filters.station,
+      });
+      if (filters.start_date) parameters.set('start_date', filters.start_date);
+      if (filters.end_date) parameters.set('end_date', filters.end_date);
+      const data = await getData(`/resultados?${parameters}`);
+      resultsPage = data.page;
+      latestResultsItems = data.items;
+      resultDays = [];
+      expandedResultDays.clear();
+      expandedResultHours.clear();
+      resultHourCache.clear();
+      resultReadingCache.clear();
+      setConnectionStatus(true);
+      document.querySelector('#results-total-label').textContent = 'Lecturas encontradas';
+      document.querySelector('#latest-metric-label').textContent = 'Lecturas en la página';
+      document.querySelector('#latest-speed').textContent = data.items.length.toLocaleString('es-MX');
+      document.querySelector('.extremes-strip').hidden = false;
+      renderExtremes(data.extremes);
+      updateResultsTablePagination(data);
+      renderResultsTable(data.items);
+      return;
+    }
+
     const parameters = new URLSearchParams({
-      level: 'days', page, page_size: 30, ...readResultsFilters(),
+      level: 'days',
+      page: String(page),
+      page_size: String(resultsPageSize),
+      order: filters.order,
+      station: filters.station,
     });
+    if (filters.start_date) parameters.set('start_date', filters.start_date);
+    if (filters.end_date) parameters.set('end_date', filters.end_date);
     const data = await getData(`/resultados/explorar?${parameters}`);
-    setConnectionStatus(true);
     resultsPage = data.page;
     resultDays = data.items;
+    setConnectionStatus(true);
     latestResultsItems = [];
     expandedResultDays.clear();
     expandedResultHours.clear();
@@ -312,7 +382,7 @@ async function loadResults(page = resultsPage) {
     document.querySelector('#latest-metric-label').textContent = 'Lecturas del día abierto';
     document.querySelector('#latest-speed').textContent = '—';
     document.querySelector('.extremes-strip').hidden = true;
-    updateResultsPagination(data);
+    updateResultsPagination(data.total, resultsPage);
     renderResultsHierarchy();
   } catch (error) {
     setConnectionStatus(false);
@@ -357,6 +427,7 @@ function updateExpandedResult(level, key) {
   const cache = level === 'day' ? resultHourCache : resultReadingCache;
   const cacheKey = level === 'day' ? date : key;
   if (cache.has(cacheKey)) return;
+  cache.set(cacheKey, []);
   loadExpandedResultLevel(level === 'day' ? 'hours' : 'readings', date, hour)
     .catch(error => {
       setConnectionStatus(false);
@@ -379,12 +450,50 @@ function renderExtremes(extremes) {
 
 function readResultsFilters() {
   return {
-    year: document.querySelector('#year-filter').value,
-    date: document.querySelector('#date-search').value,
     start_date: document.querySelector('#date-start').value,
     end_date: document.querySelector('#date-end').value,
     order: document.querySelector('#date-order').value,
+    station: document.querySelector('#results-station').value,
   };
+}
+
+function updateResultsModeButtons() {
+  document.querySelectorAll('[data-results-mode]').forEach(button => {
+    const selected = button.dataset.resultsMode === resultsDisplayMode;
+    button.classList.toggle('button-primary', selected);
+    button.setAttribute('aria-pressed', String(selected));
+  });
+}
+
+function restoreResultsFilterDraft() {
+  const startDate = document.querySelector('#date-start');
+  const endDate = document.querySelector('#date-end');
+  startDate.value = appliedResultsFilters.start_date;
+  endDate.value = appliedResultsFilters.end_date;
+  document.querySelector('#date-order').value = appliedResultsFilters.order;
+  document.querySelector('#results-station').value = appliedResultsFilters.station;
+  if (appliedResultsFilters.start_date) endDate.min = appliedResultsFilters.start_date;
+  else endDate.removeAttribute('min');
+  if (appliedResultsFilters.end_date) startDate.max = appliedResultsFilters.end_date;
+  else startDate.removeAttribute('max');
+  resultsDisplayMode = appliedResultsDisplayMode;
+  resultsView = appliedResultsView;
+  selectedResultColumns.wind = [...appliedResultColumns.wind];
+  selectedResultColumns.heat = [...appliedResultColumns.heat];
+  updateResultsModeButtons();
+  renderColumnOptions();
+  document.querySelector('#results-filter-error').hidden = true;
+}
+
+function updateResultsFilterSummary() {
+  const stationSelect = document.querySelector('#results-station');
+  const stationLabel = stationSelect.selectedOptions[0]?.textContent || 'Todas las estaciones';
+  const { start_date: start, end_date: end } = appliedResultsFilters;
+  const timeLabel = start && end ? `${start} a ${end}`
+    : start ? `Desde ${start}` : end ? `Hasta ${end}` : 'Todas las fechas';
+  const viewLabel = appliedResultsDisplayMode === 'table' ? 'Vista tabla' : 'Vista agrupada';
+  document.querySelector('#results-filter-summary').textContent =
+    `${stationLabel} · ${timeLabel} · ${viewLabel}`;
 }
 
 function syncResultsViewToOrder() {
@@ -401,7 +510,8 @@ function syncResultsViewToOrder() {
     temperature_min: 'Temperatura: mínima a máxima',
   };
   resultsView = desiredView;
-  document.querySelector('#sort-summary').textContent = labels[order];
+  const summary = document.querySelector('#sort-summary');
+  if (summary) summary.textContent = labels[order];
   document.querySelectorAll('[data-results-view]').forEach(tab => {
     const selected = tab.dataset.resultsView === desiredView;
     tab.classList.toggle('active', selected);
@@ -410,6 +520,49 @@ function syncResultsViewToOrder() {
 }
 
 function initializeResultsControls() {
+  const startDate = document.querySelector('#date-start');
+  const endDate = document.querySelector('#date-end');
+  const station = document.querySelector('#results-station');
+  const dialog = document.querySelector('#results-filter-dialog');
+  const topbar = document.querySelector('.topbar');
+  const updateResultsToolbarOffset = () => {
+    const topbarHeight = topbar.getBoundingClientRect().height;
+    const toolbar = document.querySelector('.results-toolbar');
+    document.documentElement.style.setProperty('--results-toolbar-top', `${topbarHeight}px`);
+    document.documentElement.style.setProperty(
+      '--table-head-top',
+      `${topbarHeight + (toolbar ? toolbar.getBoundingClientRect().height : 0)}px`,
+    );
+  };
+  updateResultsToolbarOffset();
+  new ResizeObserver(updateResultsToolbarOffset).observe(topbar);
+  const resultsToolbar = document.querySelector('.results-toolbar');
+  if (resultsToolbar) new ResizeObserver(updateResultsToolbarOffset).observe(resultsToolbar);
+  window.addEventListener('resize', updateResultsToolbarOffset);
+  document.querySelector('#open-results-filters').addEventListener('click', () => {
+    restoreResultsFilterDraft();
+    dialog.showModal();
+  });
+  document.querySelector('#close-results-filters').addEventListener('click', () => dialog.close());
+  document.querySelector('#cancel-results-filters').addEventListener('click', () => dialog.close());
+  dialog.addEventListener('click', event => {
+    if (event.target === dialog) dialog.close();
+  });
+  dialog.addEventListener('close', restoreResultsFilterDraft);
+  startDate.addEventListener('change', () => {
+    endDate.min = startDate.value;
+    document.querySelector('#results-filter-error').hidden = true;
+  });
+  endDate.addEventListener('change', () => {
+    startDate.max = endDate.value;
+    document.querySelector('#results-filter-error').hidden = true;
+  });
+  document.querySelectorAll('[data-results-mode]').forEach(button => {
+    button.addEventListener('click', () => {
+      resultsDisplayMode = button.dataset.resultsMode;
+      updateResultsModeButtons();
+    });
+  });
   document.querySelector('#results-body').addEventListener('click', event => {
     const dayButton = event.target.closest('[data-expand-day]');
     const hourButton = event.target.closest('[data-expand-hour]');
@@ -429,17 +582,43 @@ function initializeResultsControls() {
     });
   });
   document.querySelector('#date-order').addEventListener('change', syncResultsViewToOrder);
+  document.querySelector('#date-order').addEventListener('change', renderColumnOptions);
   document.querySelector('#apply-results-filters').addEventListener('click', () => {
+    if (startDate.value && endDate.value && startDate.value > endDate.value) {
+      const error = document.querySelector('#results-filter-error');
+      error.textContent = 'La fecha inicial no puede ser posterior a la fecha final.';
+      error.hidden = false;
+      return;
+    }
     syncResultsViewToOrder();
+    appliedResultsFilters = readResultsFilters();
+    appliedResultsDisplayMode = resultsDisplayMode;
+    appliedResultsView = resultsView;
+    appliedResultColumns = {
+      wind: [...selectedResultColumns.wind],
+      heat: [...selectedResultColumns.heat],
+    };
+    updateResultsFilterSummary();
+    dialog.close();
     loadResults(1);
   });
   document.querySelector('#clear-results-filters').addEventListener('click', () => {
-    document.querySelector('#year-filter').value = '';
-    document.querySelector('#date-search').value = '';
-    document.querySelector('#date-start').value = '';
-    document.querySelector('#date-end').value = '';
+    startDate.value = '';
+    endDate.value = '';
+    station.value = 'all';
+    startDate.removeAttribute('max');
+    endDate.removeAttribute('min');
     document.querySelector('#date-order').value = 'date_desc';
     syncResultsViewToOrder();
+    appliedResultsFilters = readResultsFilters();
+    appliedResultsDisplayMode = resultsDisplayMode;
+    appliedResultsView = resultsView;
+    appliedResultColumns = {
+      wind: [...selectedResultColumns.wind],
+      heat: [...selectedResultColumns.heat],
+    };
+    updateResultsFilterSummary();
+    dialog.close();
     loadResults(1);
   });
   document.querySelector('#previous-page').addEventListener('click', () => {
@@ -478,10 +657,14 @@ async function loadHomeSummary() {
   }
 }
 
-if (document.querySelector('#stations-body')) loadStations();
-if (document.querySelector('#results-body')) {
-  initializeResultsControls();
-  renderColumnOptions();
-  loadResults();
+export function initializeLegacyPage() {
+  if (document.querySelector('#stations-body')) loadStations();
+  if (document.querySelector('#results-body')) {
+    initializeResultsControls();
+    renderColumnOptions();
+    loadResultStations().finally(() => {
+      updateResultsFilterSummary();
+      loadResults();
+    });
+  }
 }
-if (document.querySelector('.welcome-visual')) loadHomeSummary();

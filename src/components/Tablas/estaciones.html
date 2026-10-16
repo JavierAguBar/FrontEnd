@@ -1,0 +1,33 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport"
+            content="width=device-width, initial-scale=1"><title>Chetuweather |
+            Estaciones</title><link rel="stylesheet"
+            href="../CSS/site.css"></head><body><header class="topbar"><a
+                class="brand" href="../index.html"><span
+                    class="brand-mark">VN</span><span>Chetuweather</span></a><nav class="nav-links"
+                aria-label="Navegación principal"><a
+                    href="../index.html">Inicio</a><a
+                    href="../Mapa/index.html">Mapa</a><a class="active"
+                    href="estaciones.html">Estaciones</a><a
+                    href="resultados.html">Resultados</a><a
+                    href="../graficas/graficas.html">Gráficas</a></nav><span
+                class="status-pill"><i></i> Comprobando API</span></header><main
+            class="page-shell"><div class="page-heading"><div><p
+                        class="section-kicker">01 /
+                        INVENTARIO</p><h1>Estaciones</h1></div><p>El inventario
+                    de puntos de medición conectado al servidor. Filtra por
+                    nombre o ciudad.</p></div><div class="toolbar"><div
+                    class="toolbar-group"><input id="station-search"
+                        type="search" placeholder="Buscar estación..."
+                        aria-label="Buscar estación"><select class="select"
+                        id="city-filter" aria-label="Filtrar por ciudad"><option
+                            value>Todas las
+                            ciudades</option></select></div><span
+                    class="badge"><strong id="station-count">0</strong>&nbsp;
+                    estaciones</span></div><div class="table-wrap"><table
+                    class="data-table"><thead><tr><th>ID</th><th>Estación</th><th>Ciudad</th><th>Coordenadas</th><th>Estado</th></tr></thead><tbody
+                        id="stations-body"><tr><td colspan="5"
+                                class="loading">Cargando
+                                estaciones...</td></tr></tbody></table></div></main><footer
+            class="site-footer"><span>Viento Norte / Inventario</span><span>GET
+                /api/estaciones</span></footer><script
+            src="../JS/app.js?v=2"></script></body></html>
