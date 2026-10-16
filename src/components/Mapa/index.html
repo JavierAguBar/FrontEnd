@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Chetuweather | Mapa</title>
+  <link rel="stylesheet" href="../CSS/site.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+</head>
+<body>
+  <header class="topbar"><a class="brand" href="../index.html"><span class="brand-mark">VN</span><span>Chetuweather</span></a><nav class="nav-links" aria-label="Navegación principal"><a href="../index.html">Inicio</a><a class="active" href="index.html">Mapa</a><a href="../Tablas/estaciones.html">Estaciones</a><a href="../Tablas/resultados.html">Resultados</a><a href="../graficas/graficas.html">Gráficas</a></nav><span class="status-pill"><i></i> Comprobando API</span></header>
+  <main class="page-shell">
+    <div class="page-heading"><div><p class="section-kicker">00 / DISTRIBUCIÓN</p><h1>Mapa</h1></div><p>Estaciones registradas. Selecciona un punto para consultar sus coordenadas.</p></div>
+    <div class="map-layout"><section class="map-panel"><div id="station-map" class="leaflet-map" aria-label="Mapa de estaciones"></div></section><aside class="map-sidebar"><h2>Estaciones registradas</h2><div class="map-legend"><span class="legend-dot"></span><span>Ubicación registrada</span></div><ul class="map-list" id="map-station-list"><li>Cargando estaciones...</li></ul></aside></div>
+  </main>
+  <footer class="site-footer"><span>Chetuweather / Mapa</span><span>GET /api/estaciones</span></footer>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="../JS/map.js"></script>
+</body>
+</html>
