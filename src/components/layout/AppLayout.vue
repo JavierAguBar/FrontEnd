@@ -2,7 +2,7 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import AuthDialog from './AuthDialog.vue'
-import { isAdmin, isLoggedIn, isResearcher, logout, openAuthDialog, userEmail } from '@/services/auth'
+import { isAdmin, isLoggedIn, isResearcher, logout, openAuthDialog, username } from '@/services/auth'
 import { unreadCount } from '@/services/monitoring'
 
 const router = useRouter()
@@ -11,7 +11,13 @@ function signOut() {
   logout()
   // Estaciones solo es accesible para investigadores.
   const { name, meta } = router.currentRoute.value
-  if (name === 'stations' || meta.adminOnly) router.push('/')
+  if (name === 'stations' || meta.adminOnly || meta.authOnly) router.push('/')
+}
+
+const menuOpen = ref(false)
+const userMenu = ref(null)
+const closeMenuOutside = event => {
+  if (menuOpen.value && !userMenu.value?.contains(event.target)) menuOpen.value = false
 }
 
 const connectionState = ref(null)
@@ -27,8 +33,14 @@ function updateConnectionStatus(event) {
   connectionState.value = Boolean(event.detail?.connected)
 }
 
-onMounted(() => window.addEventListener('api-status', updateConnectionStatus))
-onUnmounted(() => window.removeEventListener('api-status', updateConnectionStatus))
+onMounted(() => {
+  window.addEventListener('api-status', updateConnectionStatus)
+  document.addEventListener('click', closeMenuOutside)
+})
+onUnmounted(() => {
+  window.removeEventListener('api-status', updateConnectionStatus)
+  document.removeEventListener('click', closeMenuOutside)
+})
 </script>
 
 <template>
@@ -43,12 +55,19 @@ onUnmounted(() => window.removeEventListener('api-status', updateConnectionStatu
       <RouterLink v-if="isAdmin" to="/admin/monitoreo" active-class="active">Monitoreo</RouterLink>
     </nav>
     <div class="header-actions">
-      <RouterLink v-if="isAdmin" class="alert-bell" to="/admin/alertas" :aria-label="`Alertas: ${unreadCount} sin leer`" title="Alertas">
-        🔔<span v-if="unreadCount" class="alert-badge">{{ unreadCount }}</span>
+      <RouterLink v-if="isAdmin" class="alert-bell" :class="{ 'has-alerts': unreadCount }" to="/admin/alertas" :aria-label="`Alertas: ${unreadCount} sin leer`" title="Alertas">
+        <span aria-hidden="true">🔔</span><span class="alert-bell-text">Alertas</span><span v-if="unreadCount" class="alert-badge">{{ unreadCount }}</span>
       </RouterLink>
       <template v-if="isLoggedIn">
-        <span class="user-chip" :title="userEmail">{{ userEmail }}</span>
-        <button class="button" type="button" @click="signOut">Salir</button>
+        <div ref="userMenu" class="user-menu">
+          <button class="button user-menu-button" type="button" aria-haspopup="menu" :aria-expanded="menuOpen" @click="menuOpen = !menuOpen">
+            <span class="user-menu-name">{{ username }}</span> <span aria-hidden="true">▾</span>
+          </button>
+          <div v-if="menuOpen" class="user-menu-list" role="menu">
+            <RouterLink to="/configuracion" role="menuitem" @click="menuOpen = false">Configuración</RouterLink>
+            <button type="button" role="menuitem" @click="menuOpen = false; signOut()">Cerrar sesión</button>
+          </div>
+        </div>
       </template>
       <template v-else>
         <button class="button" type="button" @click="openAuthDialog('login')">Ingresar</button>

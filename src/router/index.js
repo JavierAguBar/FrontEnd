@@ -6,7 +6,8 @@ import ResultsView from '@/views/ResultsView.vue'
 import ChartsView from '@/views/ChartsView.vue'
 import AdminMonitorView from '@/views/AdminMonitorView.vue'
 import AdminAlertsView from '@/views/AdminAlertsView.vue'
-import { isAdmin, isResearcher, openAuthDialog } from '@/services/auth'
+import SettingsView from '@/views/SettingsView.vue'
+import { isAdmin, isLoggedIn, isResearcher, openAuthDialog } from '@/services/auth'
 
 // Las rutas históricas en HTML redirigen a las vistas SPA actuales para que
 // enlaces antiguos sigan llevando a la pantalla equivalente.
@@ -20,17 +21,22 @@ const routes = [
   { path: '/Tablas/resultados.html', redirect: '/resultados' },
   { path: '/admin/monitoreo', name: 'admin-monitor', component: AdminMonitorView, meta: { adminOnly: true } },
   { path: '/admin/alertas', name: 'admin-alerts', component: AdminAlertsView, meta: { adminOnly: true } },
+  { path: '/configuracion', name: 'settings', component: SettingsView, meta: { authOnly: true } },
   { path: '/graficas', name: 'charts', component: ChartsView },
   { path: '/graficas/graficas.html', redirect: '/graficas' },
 ]
 
 const router = createRouter({
-  history: createWebHistory(),
+  history: createWebHistory(import.meta.env.BASE_URL),
   routes,
 })
 
 // Estaciones queda reservada a investigadores; los demás vuelven al inicio.
 router.beforeEach(to => {
+  if (to.meta.authOnly && !isLoggedIn.value) {
+    openAuthDialog('login')
+    return { name: 'home' }
+  }
   if (to.meta.adminOnly && !isAdmin.value) {
     openAuthDialog('login')
     return { name: 'home' }
@@ -49,6 +55,7 @@ const pageTitles = {
   charts: 'Viento Norte | Gráficas',
   'admin-monitor': 'Chetuweather | Monitoreo',
   'admin-alerts': 'Chetuweather | Alertas',
+  settings: 'Chetuweather | Configuración',
 }
 
 // Actualiza el título del navegador tras cada navegación completada.

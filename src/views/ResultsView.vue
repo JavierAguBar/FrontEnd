@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { getReadingsRange, getStations } from '@/services/api'
 import { isLoggedIn, openAuthDialog } from '@/services/auth'
+import { QUANTITIES, convert, selectedUnits, unitDecimals, unitLabel } from '@/services/units'
 
 const PAGE_SIZE = 50
 const today = new Date().toISOString().slice(0, 10)
@@ -20,21 +21,31 @@ const isSidebarOpen = ref(false)
 const COLUMNS = [
   { key: 'date', label: 'Fecha / hora' },
   { key: 'station', label: 'Estación' },
-  { key: 'wind', label: 'Viento' },
-  { key: 'direction', label: 'Dirección' },
-  { key: 'temperature', label: 'Temperatura' },
-  { key: 'humidity', label: 'Humedad' },
+  { key: 'wind', label: 'Viento', sortField: 'windspeedmph' },
+  { key: 'direction', label: 'Dirección', sortField: 'winddir' },
+  { key: 'temperature', label: 'Temperatura', sortField: 'tempf' },
+  { key: 'humidity', label: 'Humedad', sortField: 'humidity' },
 ]
 const visibleColumns = ref(COLUMNS.map(column => column.key))
 const shownColumns = computed(() => COLUMNS.filter(column => visibleColumns.value.includes(column.key)))
 const columnCount = computed(() => Math.max(1, shownColumns.value.length))
 const isShown = key => visibleColumns.value.includes(key)
 
-const viewMode = ref('grouped')
+const viewMode = ref('table')
 const expandedDays = reactive(new Set())
 const expandedHours = reactive(new Set())
 const numericFields = { wind: 'windspeedmph', direction: 'winddir', temperature: 'tempf', humidity: 'humidity' }
-const units = { wind: ' mph', direction: '°', temperature: ' °C', humidity: '%' }
+const columnQuantity = { wind: 'speed', temperature: 'temperature' }
+const fixedSuffix = { direction: '°', humidity: '%' }
+
+/** Da formato a un valor de la columna, convirtiéndolo a la unidad elegida si aplica. */
+function formatColumn(column, value) {
+  const quantity = columnQuantity[column]
+  if (!quantity) return formatValue(value, fixedSuffix[column])
+  return Number.isFinite(value) ? `${convert(quantity, value).toFixed(unitDecimals(quantity))} ${unitLabel(quantity)}` : '—'
+}
+
+const columnLabel = column => columnQuantity[column.key] ? `${column.label} (${unitLabel(columnQuantity[column.key])})` : column.label
 const pad = value => String(value).padStart(2, '0')
 const dayKey = date => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
 const hourKey = date => `${dayKey(date)}|${pad(date.getHours())}`
@@ -94,11 +105,27 @@ const groupedRows = computed(() => {
 function summaryCell(row, column) {
   if (column === 'station') return `${row.stations} ${row.stations === 1 ? 'estación' : 'estaciones'}`
   if (column === 'date') return ''
-  return formatValue(row.averages[column], units[column])
+  return formatColumn(column, row.averages[column])
 }
 /** Muestra u oculta el panel lateral de criterios. */
 function toggleSidebar() {
   isSidebarOpen.value = !isSidebarOpen.value
+}
+
+/** Ciclo por columna: mayor a menor, menor a mayor y de vuelta al orden por fecha. */
+function sortBy(column) {
+  if (!column.sortField) return
+  const [field, direction] = sortOrder.value.split(':')
+  if (field !== column.sortField) sortOrder.value = `${column.sortField}:desc`
+  else if (direction === 'desc') sortOrder.value = `${column.sortField}:asc`
+  else sortOrder.value = 'date:desc'
+  page.value = 1
+}
+
+function sortIndicator(column) {
+  const [field, direction] = sortOrder.value.split(':')
+  if (field !== column.sortField) return ''
+  return direction === 'desc' ? '▼' : '▲'
 }
 
 const stationNames = computed(() => new Map(
@@ -111,7 +138,9 @@ const filteredReadings = computed(() => {
     !stationId.value || reading.id_station === Number(stationId.value),
   )
   const [field, direction] = sortOrder.value.split(':')
-  return result.sort((left, right) => {
+  // Al ordenar por un valor se omiten las lecturas sin dato en esa columna.
+  const sortable = field === 'date' ? result : result.filter(reading => Number.isFinite(reading[field]))
+  return sortable.sort((left, right) => {
     const leftValue = left[field]
     const rightValue = right[field]
     const comparison = field === 'date'
@@ -152,9 +181,9 @@ function formatValue(value, suffix = '') {
 const csvValue = {
   date: reading => reading.date.toISOString(),
   station: reading => stationName(reading.id_station),
-  wind: reading => reading.windspeedmph,
+  wind: reading => convert('speed', reading.windspeedmph),
   direction: reading => reading.winddir,
-  temperature: reading => reading.tempf,
+  temperature: reading => convert('temperature', reading.tempf),
   humidity: reading => reading.humidity,
 }
 
@@ -169,7 +198,7 @@ function exportCsv() {
     return /[",\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text
   }
   const rows = [
-    shownColumns.value.map(column => escapeCell(column.label)).join(','),
+    shownColumns.value.map(column => escapeCell(columnLabel(column))).join(','),
     ...filteredReadings.value.map(reading =>
       shownColumns.value.map(column => escapeCell(csvValue[column.key](reading))).join(',')),
   ]
@@ -302,8 +331,22 @@ onMounted(async () => {
                 <option value="windspeedmph:asc">Viento: mínimo primero</option>
                 <option value="tempf:desc">Temperatura: máxima primero</option>
                 <option value="tempf:asc">Temperatura: mínima primero</option>
+                <option value="winddir:desc">Dirección: mayor primero</option>
+                <option value="winddir:asc">Dirección: menor primero</option>
+                <option value="humidity:desc">Humedad: máxima primero</option>
+                <option value="humidity:asc">Humedad: mínima primero</option>
               </select>
             </div>
+
+            <fieldset class="form-group unit-picker-group">
+              <legend>Unidades</legend>
+              <label v-for="key in ['speed', 'temperature']" :key="key" class="unit-row">
+                <span>{{ QUANTITIES[key].label }}</span>
+                <select v-model="selectedUnits[key]" class="select">
+                  <option v-for="(unit, unitKey) in QUANTITIES[key].units" :key="unitKey" :value="unitKey">{{ unit.label }}</option>
+                </select>
+              </label>
+            </fieldset>
 
             <fieldset class="form-group column-picker-group">
               <legend>Datos a mostrar</legend>
@@ -329,12 +372,12 @@ onMounted(async () => {
       <section class="results-main-content">
         <div class="metric-strip result-metrics">
           <div class="metric"><label>Lecturas encontradas</label><strong>{{ filteredReadings.length.toLocaleString('es-MX') }}</strong></div>
-          <div class="metric"><label>Velocidad promedio</label><strong>{{ formatValue(averageSpeed, ' mph') }}</strong></div>
+          <div class="metric"><label>Velocidad promedio</label><strong>{{ formatColumn('wind', averageSpeed) }}</strong></div>
           <div class="metric"><label>Origen</label><strong>MongoDB</strong></div>
         </div>
         <div class="extremes-strip">
-          <div><span>Velocidad mínima</span><strong>{{ formatValue(minimumSpeed, ' mph') }}</strong></div>
-          <div><span>Velocidad máxima</span><strong>{{ formatValue(maximumSpeed, ' mph') }}</strong></div>
+          <div><span>Velocidad mínima</span><strong>{{ formatColumn('wind', minimumSpeed) }}</strong></div>
+          <div><span>Velocidad máxima</span><strong>{{ formatColumn('wind', maximumSpeed) }}</strong></div>
         </div>
 
         <p v-if="errorMessage" class="error" role="alert">{{ errorMessage }}</p>
@@ -353,7 +396,15 @@ onMounted(async () => {
         </div>
         <div class="table-wrap">
           <table class="data-table">
-            <thead><tr><th v-for="column in shownColumns" :key="column.key">{{ column.label }}</th></tr></thead>
+            <thead><tr>
+              <th
+                v-for="column in shownColumns"
+                :key="column.key"
+                :class="{ 'is-sortable': column.sortField }"
+                :aria-sort="column.sortField && sortIndicator(column) ? (sortIndicator(column) === '▼' ? 'descending' : 'ascending') : undefined"
+                @click="sortBy(column)"
+              >{{ columnLabel(column) }} <span class="sort-indicator">{{ sortIndicator(column) }}</span></th>
+            </tr></thead>
             <tbody>
               <tr v-if="loading"><td :colspan="columnCount" class="loading">Consultando lecturas...</td></tr>
               <template v-else-if="viewMode === 'grouped' && groupedRows.length">
@@ -373,10 +424,10 @@ onMounted(async () => {
                   <tr v-else class="result-reading-row">
                     <td v-if="isShown('date')" class="mono">{{ formatDate(row.reading.date) }}</td>
                     <td v-if="isShown('station')">{{ stationName(row.reading.id_station) }}</td>
-                    <td v-if="isShown('wind')">{{ formatValue(row.reading.windspeedmph, ' mph') }}</td>
-                    <td v-if="isShown('direction')">{{ formatValue(row.reading.winddir, '°') }}</td>
-                    <td v-if="isShown('temperature')">{{ formatValue(row.reading.tempf, ' °C') }}</td>
-                    <td v-if="isShown('humidity')">{{ formatValue(row.reading.humidity, '%') }}</td>
+                    <td v-if="isShown('wind')">{{ formatColumn('wind', row.reading.windspeedmph) }}</td>
+                    <td v-if="isShown('direction')">{{ formatColumn('direction', row.reading.winddir) }}</td>
+                    <td v-if="isShown('temperature')">{{ formatColumn('temperature', row.reading.tempf) }}</td>
+                    <td v-if="isShown('humidity')">{{ formatColumn('humidity', row.reading.humidity) }}</td>
                   </tr>
                 </template>
               </template>
@@ -386,10 +437,10 @@ onMounted(async () => {
               <tr v-for="reading in visibleReadings" v-else-if="viewMode === 'table'" :key="`${reading.id_station}-${reading.date.toISOString()}`">
                 <td v-if="isShown('date')" class="mono">{{ formatDate(reading.date) }}</td>
                 <td v-if="isShown('station')">{{ stationName(reading.id_station) }}</td>
-                <td v-if="isShown('wind')">{{ formatValue(reading.windspeedmph, ' mph') }}</td>
-                <td v-if="isShown('direction')">{{ formatValue(reading.winddir, '°') }}</td>
-                <td v-if="isShown('temperature')">{{ formatValue(reading.tempf, ' °C') }}</td>
-                <td v-if="isShown('humidity')">{{ formatValue(reading.humidity, '%') }}</td>
+                <td v-if="isShown('wind')">{{ formatColumn('wind', reading.windspeedmph) }}</td>
+                <td v-if="isShown('direction')">{{ formatColumn('direction', reading.winddir) }}</td>
+                <td v-if="isShown('temperature')">{{ formatColumn('temperature', reading.tempf) }}</td>
+                <td v-if="isShown('humidity')">{{ formatColumn('humidity', reading.humidity) }}</td>
               </tr>
             </tbody>
           </table>

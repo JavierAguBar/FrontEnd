@@ -38,7 +38,7 @@ function buildChart(readings) {
     const speed = Number(reading.windspeedmph)
     return {
       height: Number.isFinite(speed) && maximum > 0 ? `${Math.max(8, speed / maximum * 100)}%` : '4%',
-      title: `${reading.date || 'Sin fecha'}: ${Number.isFinite(speed) ? speed.toFixed(2) : '—'} mph`,
+      title: `${reading.date || 'Sin fecha'}: ${Number.isFinite(speed) ? speed.toFixed(2) : '—'} m/s`,
     }
   })
 }
@@ -98,7 +98,7 @@ async function loadHomeSummary() {
     const degrees = Number(latest.winddir)
     const normalized = ((degrees % 360) + 360) % 360
     const speed = Number(latest.windspeedmph)
-    windSpeed.value = Number.isFinite(speed) ? (speed * 0.44704).toFixed(1) : '—'
+    windSpeed.value = Number.isFinite(speed) ? speed.toFixed(1) : '—'
     windDirection.value = Number.isFinite(degrees)
       ? `${directionNames[Math.round(normalized / 22.5) % directionNames.length]} · ${degrees.toFixed(0)}°`
       : 'Sin rumbo disponible'

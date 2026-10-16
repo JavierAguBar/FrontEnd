@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { getReadingsRange, getStations } from '@/services/api'
 import { loadExternalScript } from '@/utils/externalScript'
 import { isLoggedIn, openAuthDialog } from '@/services/auth'
+import { QUANTITIES, convert, selectedUnits, unitDecimals, unitLabel } from '@/services/units'
 
 const today = new Date().toISOString().slice(0, 10)
 // Sin sesión solo se consultan los últimos 7 días (hoy incluido).
@@ -34,19 +35,24 @@ const chartTypes = {
 let chart = null
 
 const metrics = {
-  windspeedmph: { label: 'Velocidad del viento', unit: 'mph' },
-  tempf: { label: 'Temperatura', unit: '°C' },
+  windspeedmph: { label: 'Velocidad del viento', quantity: 'speed' },
+  tempf: { label: 'Temperatura', quantity: 'temperature' },
   humidity: { label: 'Humedad exterior', unit: '%' },
-  windgustmph: { label: 'Ráfaga de viento', unit: 'mph' },
-  baromrelin: { label: 'Presión relativa', unit: 'inHg' },
-  hourlyrainin: { label: 'Lluvia por hora', unit: 'in' },
+  windgustmph: { label: 'Ráfaga de viento', quantity: 'speed' },
+  baromrelin: { label: 'Presión relativa', quantity: 'pressure' },
+  hourlyrainin: { label: 'Lluvia por hora', quantity: 'rain' },
 }
 // Paleta cíclica: permite distinguir estaciones incluso si se consultan más
 // series que colores definidos.
 const colors = ['#0f5d5b', '#d86b48', '#628b35', '#477b9a', '#a34c67', '#8a741f', '#6d58a4', '#338d8c']
-const metricInfo = computed(() => metrics[metric.value])
+const metricInfo = computed(() => {
+  const info = metrics[metric.value]
+  return { ...info, unit: info.quantity ? unitLabel(info.quantity) : info.unit }
+})
+// Convierte desde la unidad base de la API a la elegida (humedad no se convierte).
+const toDisplay = value => metrics[metric.value].quantity ? convert(metrics[metric.value].quantity, value) : value
 const metricValues = computed(() => readings.value
-  .map(reading => reading[metric.value])
+  .map(reading => toDisplay(reading[metric.value]))
   .filter(Number.isFinite))
 const average = computed(() => metricValues.value.length
   ? metricValues.value.reduce((sum, value) => sum + value, 0) / metricValues.value.length
@@ -55,7 +61,7 @@ const minimum = computed(() => metricValues.value.length ? Math.min(...metricVal
 const maximum = computed(() => metricValues.value.length ? Math.max(...metricValues.value) : null)
 
 function formatValue(value) {
-  return Number.isFinite(value) ? `${value.toLocaleString('es-MX', { maximumFractionDigits: 1 })} ${metricInfo.value.unit}` : '—'
+  return Number.isFinite(value) ? `${value.toLocaleString('es-MX', { maximumFractionDigits: metrics[metric.value].quantity ? unitDecimals(metrics[metric.value].quantity) : 1 })} ${metricInfo.value.unit}` : '—'
 }
 
 function stationLabel(id) {
@@ -77,7 +83,7 @@ function renderChart() {
   for (const reading of readings.value) {
     // Intervalos largos usan una hora para limitar puntos; periodos cortos
     // mantienen resolución de diez minutos.
-    const value = reading[metric.value]
+    const value = toDisplay(reading[metric.value])
     if (!Number.isFinite(value)) continue
     const bucket = Math.floor(reading.date.getTime() / bucketSize) * bucketSize
     const key = `${reading.id_station}:${bucket}`
@@ -211,6 +217,11 @@ async function setPeriod(period) {
   await loadChartData()
 }
 
+// Redibuja al cambiar la unidad de la métrica mostrada.
+watch(() => selectedUnits[metrics[metric.value].quantity], () => {
+  if (loaded.value) renderChart()
+})
+
 // Al cerrar sesión se ajusta el rango consultado al límite de invitados.
 watch(isLoggedIn, loggedIn => {
   if (!loggedIn && startDate.value < oldestGuestDate) {
@@ -249,6 +260,11 @@ onUnmounted(() => {
       <label>Medición
         <select v-model="metric" class="select" @change="renderChart">
           <option v-for="(info, key) in metrics" :key="key" :value="key">{{ info.label }}</option>
+        </select>
+      </label>
+      <label v-if="metrics[metric].quantity">Unidad
+        <select v-model="selectedUnits[metrics[metric].quantity]" class="select">
+          <option v-for="(unit, key) in QUANTITIES[metrics[metric].quantity].units" :key="key" :value="key">{{ unit.label }}</option>
         </select>
       </label>
       <label>Tipo de gráfica

@@ -9,6 +9,8 @@ import ResultsView from './views/ResultsView.vue'
 import ChartsView from './views/ChartsView.vue'
 import AdminMonitorView from './views/AdminMonitorView.vue'
 import AdminAlertsView from './views/AdminAlertsView.vue'
+import SettingsView from './views/SettingsView.vue'
+import '@/services/preferences'
 
 const route = useRoute()
 const views = {
@@ -19,6 +21,7 @@ const views = {
   charts: ChartsView,
   'admin-monitor': AdminMonitorView,
   'admin-alerts': AdminAlertsView,
+  settings: SettingsView,
 }
 // Se conserva montada cada vista que se visitó; esto preserva su estado local
 // al navegar entre secciones sin crear la vista antes de que se use.
